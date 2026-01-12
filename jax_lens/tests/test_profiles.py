@@ -11,9 +11,6 @@ import jax.numpy as jnp
 import jax.random as jr
 from jax import jit, vmap, grad
 
-import sys
-sys.path.insert(0, "/home/will/tmp/natalie/demo")
-
 from jax_lens.profiles import light, mass
 
 

@@ -9,35 +9,47 @@ This script performs pixel-by-pixel comparison of:
 Run with: python compare_implementations.py
 """
 
+from __future__ import annotations
+
+import argparse
 import numpy as np
 import jax.numpy as jnp
+import os
 import sys
-sys.path.insert(0, "/home/will/tmp/natalie/demo")
 
 # Import jax_lens
 from jax_lens.profiles import light as jl_light, mass as jl_mass
 from jax_lens.lens.tracer import simple_tracer_image
 from jax_lens.fitting.imaging import convolve_image
 
-# Try to import PyAutoLens (first from pip, then from local clone)
-HAS_AUTOLENS = False
-try:
-    import autolens as al
-    import autoarray as aa
-    HAS_AUTOLENS = True
-except ImportError:
+al = None
+aa = None
+
+
+def _try_import_pyautolens(pyautolens_path: str | None) -> bool:
+    """
+    Try to import PyAutoLens / AutoArray, optionally by adding a repo path to sys.path.
+
+    pyautolens_path should be the *PyAutoLens repository root* (the directory that contains
+    the top-level `autolens/` package).
+    """
+    global al, aa
+
+    if pyautolens_path:
+        sys.path.insert(0, pyautolens_path)
+
     try:
-        sys.path.insert(0, "/home/will/tmp/natalie/demo/PyAutoLens")
-        import autolens as al
-        import autoarray as aa
-        HAS_AUTOLENS = True
-        print("Using PyAutoLens from local clone")
-    except ImportError as e:
-        print(f"PyAutoLens not available: {e}")
-        print("Running self-consistency tests only")
+        import autolens as _al  # type: ignore
+        import autoarray as _aa  # type: ignore
+    except Exception:
+        return False
+
+    al = _al
+    aa = _aa
+    return True
 
 
-def compare_sersic():
+def compare_sersic(has_autolens: bool):
     """Compare Sersic light profile implementations."""
     print("\n" + "=" * 60)
     print("Sersic Light Profile Comparison")
@@ -54,7 +66,7 @@ def compare_sersic():
     effective_radius = 0.5
     sersic_index = 2.0
 
-    if HAS_AUTOLENS:
+    if has_autolens:
         # Get grid coordinates from PyAutoLens
         grid_al = al.Grid2D.uniform(shape_native=(n, n), pixel_scales=pixel_scale)
         coords = np.array(grid_al)
@@ -128,7 +140,7 @@ def compare_sersic():
         return False
 
 
-def compare_sis_deflections():
+def compare_sis_deflections(has_autolens: bool):
     """Compare SIS deflection implementations."""
     print("\n" + "=" * 60)
     print("SIS Deflection Comparison")
@@ -140,7 +152,7 @@ def compare_sis_deflections():
     centre = (0.0, 0.0)
     einstein_radius = 1.2
 
-    if HAS_AUTOLENS:
+    if has_autolens:
         grid_al = al.Grid2D.uniform(shape_native=(n, n), pixel_scales=pixel_scale)
         coords = np.array(grid_al)
         grid_jax = jnp.array(coords)
@@ -195,7 +207,7 @@ def compare_sis_deflections():
         return False
 
 
-def compare_sie_deflections():
+def compare_sie_deflections(has_autolens: bool):
     """Compare SIE deflection implementations."""
     print("\n" + "=" * 60)
     print("SIE Deflection Comparison")
@@ -209,7 +221,7 @@ def compare_sie_deflections():
     axis_ratio = 0.7
     angle_deg = 30.0
 
-    if HAS_AUTOLENS:
+    if has_autolens:
         grid_al = al.Grid2D.uniform(shape_native=(n, n), pixel_scales=pixel_scale)
         coords = np.array(grid_al)
         grid_jax = jnp.array(coords)
@@ -341,20 +353,33 @@ def compare_full_lens():
     return True
 
 
-def main():
+def main() -> bool:
+    parser = argparse.ArgumentParser(description="Compare jax_lens against PyAutoLens (optional).")
+    parser.add_argument(
+        "--pyautolens-path",
+        default=os.environ.get("PYAUTOLENS_PATH"),
+        help="Path to a local PyAutoLens repo root; can also be set via PYAUTOLENS_PATH.",
+    )
+    args = parser.parse_args()
+
+    has_autolens = _try_import_pyautolens(args.pyautolens_path) or _try_import_pyautolens(None)
+
     print("=" * 60)
     print("jax_lens vs PyAutoLens Comparison")
     print("=" * 60)
 
-    if HAS_AUTOLENS:
+    if has_autolens:
         print("\nPyAutoLens available - running full comparison")
+        if args.pyautolens_path:
+            print(f"Using PyAutoLens from: {args.pyautolens_path}")
     else:
         print("\nPyAutoLens not available - running self-consistency tests")
+        print("Tip: pass `--pyautolens-path /path/to/PyAutoLens` or set `PYAUTOLENS_PATH`.")
 
     results = []
-    results.append(("Sersic", compare_sersic()))
-    results.append(("SIS", compare_sis_deflections()))
-    results.append(("SIE", compare_sie_deflections()))
+    results.append(("Sersic", compare_sersic(has_autolens)))
+    results.append(("SIS", compare_sis_deflections(has_autolens)))
+    results.append(("SIE", compare_sie_deflections(has_autolens)))
     results.append(("Full Lens", compare_full_lens()))
 
     print("\n" + "=" * 60)

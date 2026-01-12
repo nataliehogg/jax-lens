@@ -13,10 +13,6 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 
-# Import jax_lens components
-import sys
-sys.path.insert(0, "/home/will/tmp/natalie/demo")
-
 import jax_lens as jl
 from jax_lens.profiles import light, mass
 from jax_lens.lens.tracer import (

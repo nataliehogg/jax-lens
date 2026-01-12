@@ -35,6 +35,7 @@ import jax
 import jax.numpy as jnp
 from jax import jit, vmap
 from functools import partial
+import math
 from typing import Callable, Optional, Dict, Any, Tuple
 
 from jax_lens.lens.tracer import (
@@ -130,7 +131,7 @@ def unflatten_params(flat_params: jnp.ndarray, structure: dict) -> dict:
             profile_params = {}
             for key, (ptype, shape, idx) in profile_struct.items():
                 if ptype == "array":
-                    size = int(jnp.prod(jnp.array(shape)))
+                    size = int(math.prod(shape))
                     profile_params[key] = flat_params[idx : idx + size].reshape(shape)
                 else:
                     profile_params[key] = flat_params[idx]
@@ -140,7 +141,7 @@ def unflatten_params(flat_params: jnp.ndarray, structure: dict) -> dict:
             profile_params = {}
             for key, (ptype, shape, idx) in profile_struct.items():
                 if ptype == "array":
-                    size = int(jnp.prod(jnp.array(shape)))
+                    size = int(math.prod(shape))
                     profile_params[key] = flat_params[idx : idx + size].reshape(shape)
                 else:
                     profile_params[key] = flat_params[idx]
