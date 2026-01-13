@@ -204,9 +204,8 @@ def sie_deflections(
     q = axis_ratio
     f = jnp.sqrt(1.0 - q**2)
 
-    # Elliptical radius (avoid zero)
-    psi = jnp.sqrt(q**2 * x_rot**2 + y_rot**2)
-    psi = jnp.maximum(psi, 1e-12)
+    # Elliptical radius - regularize inside sqrt for smooth gradients at center
+    psi = jnp.sqrt(q**2 * x_rot**2 + y_rot**2 + 1e-12)
 
     # Deflection in rotated frame (Kormann et al. 1994)
     # For q < 1, we have deflections that depend on arctan
@@ -230,8 +229,7 @@ def sie_deflections(
 
     # Handle near-circular case (q close to 1)
     is_circular = q > 0.9999
-    r = jnp.sqrt(x_rot**2 + y_rot**2)
-    r = jnp.maximum(r, 1e-12)
+    r = jnp.sqrt(x_rot**2 + y_rot**2 + 1e-12)
 
     alpha_x_rot_circ = einstein_radius * x_rot / r
     alpha_y_rot_circ = einstein_radius * y_rot / r
