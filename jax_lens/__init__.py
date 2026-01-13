@@ -69,10 +69,15 @@ from jax_lens.pipeline import (
     create_likelihood_fn,
     batched_likelihood,
 )
+from jax_lens.data import (
+    ImagingDataset,
+    load_imaging_dataset,
+)
 from jax_lens.pixelization import (
     PixelizationConfig,
     PixelizationCache,
     build_pixelization_cache,
+    build_pixelization_cache_from_tracer,
     pixelized_source_reconstruction,
 )
 
@@ -104,9 +109,13 @@ __all__ = [
     # Pipeline
     "create_likelihood_fn",
     "batched_likelihood",
+    # Data
+    "ImagingDataset",
+    "load_imaging_dataset",
     # Pixelization
     "PixelizationConfig",
     "PixelizationCache",
     "build_pixelization_cache",
+    "build_pixelization_cache_from_tracer",
     "pixelized_source_reconstruction",
 ]

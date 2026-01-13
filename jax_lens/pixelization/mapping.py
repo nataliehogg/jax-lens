@@ -15,6 +15,8 @@ import jax
 import jax.numpy as jnp
 from scipy.spatial import Delaunay
 
+from jax_lens.lens.tracer import traced_grid_list
+
 
 @jax.tree_util.register_pytree_node_class
 @dataclass
@@ -174,9 +176,31 @@ def mapping_matrix_dense(
     return mapping
 
 
+def build_pixelization_cache_from_tracer(
+    grid: jnp.ndarray,
+    config,
+    params: dict,
+    seeds: onp.ndarray,
+    scaling_factors: onp.ndarray | None = None,
+    source_plane_index: int = -1,
+) -> PixelizationCache:
+    """
+    Convenience helper to build a cache from a tracer configuration.
+
+    This calls SciPy Delaunay on host NumPy, so it is not JIT-compatible.
+    """
+    if source_plane_index < 0:
+        source_plane_index = len(config.planes) + source_plane_index
+
+    traced = traced_grid_list(grid, config, params, scaling_factors)
+    points = onp.asarray(traced[source_plane_index])
+    return build_pixelization_cache(seeds=onp.asarray(seeds), points=points)
+
+
 __all__ = [
     "PixelizationCache",
     "build_pixelization_cache",
+    "build_pixelization_cache_from_tracer",
     "barycentric_weights",
     "mapping_weights",
     "apply_mapping",

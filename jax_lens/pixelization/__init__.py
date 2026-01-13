@@ -4,6 +4,7 @@ from jax_lens.pixelization.mapping import (
     apply_mapping,
     barycentric_weights,
     build_pixelization_cache,
+    build_pixelization_cache_from_tracer,
     mapping_weights,
     mapping_matrix_dense,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "PixelizationConfig",
     "PixelizationCache",
     "build_pixelization_cache",
+    "build_pixelization_cache_from_tracer",
     "barycentric_weights",
     "mapping_weights",
     "mapping_matrix_dense",
