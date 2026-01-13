@@ -50,7 +50,8 @@ def _elliptical_radius(
 
     # Compute elliptical radius: r_ell = sqrt(x^2 + y^2/q^2)
     # Using x along major axis, y along minor axis
-    r_ell = jnp.sqrt(x_rot**2 + (y_rot / axis_ratio) ** 2)
+    # Regularize inside sqrt for smooth gradients at center
+    r_ell = jnp.sqrt(x_rot**2 + (y_rot / axis_ratio) ** 2 + 1e-12)
 
     return r_ell
 
@@ -114,9 +115,7 @@ def sersic(
         Surface brightness at each grid point
     """
     r_ell = _elliptical_radius(grid, centre, axis_ratio, angle)
-
-    # Avoid division by zero for very small radii
-    r_ell = jnp.maximum(r_ell, 1e-12)
+    # Note: r_ell is already regularized in _elliptical_radius for smooth gradients
 
     bn = _sersic_bn(sersic_index)
 
