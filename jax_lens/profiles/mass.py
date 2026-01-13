@@ -220,8 +220,13 @@ def sie_deflections(
     factor = 2.0 * einstein_radius_rescaled * q / f
 
     # Deflections in rotated frame
-    alpha_x_rot = factor * jnp.arctan(f * x_rot / psi)
-    alpha_y_rot = factor * jnp.arctanh(f * y_rot / psi)
+    # Clip arguments to avoid NaN from arctan/arctanh at boundary values
+    # arctanh is only defined for |x| < 1, so we clip to avoid numerical issues
+    arctan_arg = f * x_rot / psi
+    arctanh_arg = jnp.clip(f * y_rot / psi, -0.999999, 0.999999)
+
+    alpha_x_rot = factor * jnp.arctan(arctan_arg)
+    alpha_y_rot = factor * jnp.arctanh(arctanh_arg)
 
     # Handle near-circular case (q close to 1)
     is_circular = q > 0.9999
