@@ -41,6 +41,8 @@ from typing import Callable, Optional, Dict, Any, Tuple
 from jax_lens.lens.tracer import (
     TracerConfig,
     PlaneConfig,
+    compute_plane_image,
+    traced_grid_list,
     tracer_image,
 )
 from jax_lens.fitting.imaging import (
@@ -54,6 +56,7 @@ from jax_lens.cosmology.distances import (
     Cosmology,
     PLANCK15,
 )
+from jax_lens.pixelization import PixelizationConfig, PixelizationCache, pixelized_source_reconstruction
 
 
 def flatten_params(params: dict) -> Tuple[jnp.ndarray, dict]:
@@ -162,6 +165,8 @@ def create_likelihood_fn(
     image_shape: Optional[Tuple[int, int]] = None,
     include_noise_norm: bool = True,
     precomputed_distances: Optional[dict] = None,
+    source_mode: str = "analytic",
+    pixelization: Optional[PixelizationConfig] = None,
 ) -> Callable[[dict], float]:
     """
     Create a likelihood function with static data baked in.
@@ -189,12 +194,20 @@ def create_likelihood_fn(
         Whether to include noise normalization in likelihood
     precomputed_distances : dict, optional
         Pre-computed cosmological distances
+    source_mode : str
+        "analytic" (default) or "pixelization" for Voronoi reconstruction.
+    pixelization : PixelizationConfig, optional
+        Settings for pixelized source reconstruction (required if source_mode="pixelization").
 
     Returns
     -------
-    Callable[[dict], float]
-        Function that maps parameters -> log_likelihood
+    Callable
+        If source_mode="analytic", maps params -> log_likelihood.
+        If source_mode="pixelization", maps (params, PixelizationCache) -> log_likelihood.
     """
+    if source_mode not in ("analytic", "pixelization"):
+        raise ValueError("source_mode must be 'analytic' or 'pixelization'")
+
     # Pre-compute scaling factors if not provided
     if precomputed_distances is None and len(config.planes) > 1:
         redshifts = jnp.array([p.redshift for p in config.planes])
@@ -218,19 +231,84 @@ def create_likelihood_fn(
     else:
         likelihood_fn = log_likelihood_chi2_only
 
-    def _likelihood(params: dict) -> float:
-        # Compute model image
-        model = tracer_image(grid, config, params, scaling_matrix)
+    if source_mode == "analytic":
+        def _likelihood(params: dict) -> float:
+            # Compute model image
+            model = tracer_image(grid, config, params, scaling_matrix)
 
-        # Handle PSF convolution if needed
-        if psf is not None and image_shape is not None:
-            model_2d = model.reshape(image_shape)
-            model_2d = convolve_image(model_2d, psf)
-            model = model_2d.flatten()
+            # Handle PSF convolution if needed
+            if psf is not None and image_shape is not None:
+                model_2d = model.reshape(image_shape)
+                model_2d = convolve_image(model_2d, psf)
+                model = model_2d.flatten()
 
+            return likelihood_fn(data, model, noise_map, mask)
+
+        return _likelihood
+
+    if pixelization is None:
+        raise ValueError("pixelization config is required for source_mode='pixelization'")
+    if psf is not None and image_shape is None:
+        raise ValueError("image_shape is required when psf is provided.")
+
+    source_plane_index = pixelization.source_plane_index
+    if source_plane_index < 0:
+        source_plane_index = len(config.planes) + source_plane_index
+
+    def _pixelized_likelihood(
+        params: dict,
+        pixelization_cache: PixelizationCache,
+    ) -> float:
+        traced_grids = traced_grid_list(grid, config, params, scaling_matrix)
+
+        # Compute analytic light in non-source planes.
+        total_image = jnp.zeros(grid.shape[:-1])
+        for plane_idx, plane_config in enumerate(config.planes):
+            if plane_idx == source_plane_index:
+                if len(plane_config.light_profile_types) > 0:
+                    raise ValueError(
+                        "Source plane light profiles are not supported with pixelization."
+                    )
+                continue
+            light_types = plane_config.light_profile_types
+            light_params = params["planes"][plane_idx].get("light", [])
+            if len(light_types) > 0:
+                plane_image = compute_plane_image(
+                    traced_grids[plane_idx], light_types, light_params
+                )
+                total_image = total_image + plane_image
+
+        if psf is not None:
+            total_image_2d = total_image.reshape(image_shape)
+            total_image = convolve_image(total_image_2d, psf).reshape(-1)
+
+        seeds = None
+        if "pixelization" in params and "seeds" in params["pixelization"]:
+            seeds = params["pixelization"]["seeds"]
+        elif pixelization.seeds is not None:
+            seeds = pixelization.seeds
+        if seeds is None:
+            raise ValueError("Pixelization seeds not provided.")
+
+        data_residual = data - total_image
+        source_model, _ = pixelized_source_reconstruction(
+            points=traced_grids[source_plane_index],
+            seeds=seeds,
+            cache=pixelization_cache,
+            data=data_residual,
+            noise_map=noise_map,
+            regularization_weight=pixelization.regularization_weight,
+            solver=pixelization.solver,
+            solver_kwargs=pixelization.solver_kwargs,
+            mask=mask,
+            psf=psf,
+            image_shape=image_shape,
+        )
+
+        model = total_image + source_model
         return likelihood_fn(data, model, noise_map, mask)
 
-    return _likelihood
+    return _pixelized_likelihood
 
 
 def create_likelihood_fn_flat(
@@ -243,6 +321,8 @@ def create_likelihood_fn_flat(
     mask: Optional[jnp.ndarray] = None,
     image_shape: Optional[Tuple[int, int]] = None,
     include_noise_norm: bool = True,
+    source_mode: str = "analytic",
+    pixelization: Optional[PixelizationConfig] = None,
 ) -> Callable[[jnp.ndarray], float]:
     """
     Create a likelihood function that takes a flat parameter vector.
@@ -276,6 +356,9 @@ def create_likelihood_fn_flat(
         Function that maps flat_params -> log_likelihood
     """
     # Create the dictionary-based likelihood
+    if source_mode != "analytic":
+        raise NotImplementedError("Flat parameter interface is not supported for pixelization.")
+
     dict_likelihood = create_likelihood_fn(
         config=config,
         grid=grid,
@@ -285,6 +368,8 @@ def create_likelihood_fn_flat(
         mask=mask,
         image_shape=image_shape,
         include_noise_norm=include_noise_norm,
+        source_mode=source_mode,
+        pixelization=pixelization,
     )
 
     def _likelihood_flat(flat_params: jnp.ndarray) -> float:

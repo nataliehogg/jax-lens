@@ -69,6 +69,12 @@ from jax_lens.pipeline import (
     create_likelihood_fn,
     batched_likelihood,
 )
+from jax_lens.pixelization import (
+    PixelizationConfig,
+    PixelizationCache,
+    build_pixelization_cache,
+    pixelized_source_reconstruction,
+)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -98,4 +104,9 @@ __all__ = [
     # Pipeline
     "create_likelihood_fn",
     "batched_likelihood",
+    # Pixelization
+    "PixelizationConfig",
+    "PixelizationCache",
+    "build_pixelization_cache",
+    "pixelized_source_reconstruction",
 ]
