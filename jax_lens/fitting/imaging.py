@@ -104,6 +104,8 @@ def chi_squared(
     chi2_map = chi_squared_map(data, model, noise_map)
 
     if mask is not None:
+        if mask.shape != chi2_map.shape:
+            mask = mask.reshape(chi2_map.shape)
         chi2_map = jnp.where(mask, chi2_map, 0.0)
 
     return jnp.sum(chi2_map)
@@ -133,6 +135,8 @@ def noise_normalization(
     log_term = jnp.log(2.0 * jnp.pi * noise_map**2)
 
     if mask is not None:
+        if mask.shape != log_term.shape:
+            mask = mask.reshape(log_term.shape)
         log_term = jnp.where(mask, log_term, 0.0)
 
     return jnp.sum(log_term)
